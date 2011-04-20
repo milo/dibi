@@ -32,13 +32,17 @@ class DibiDatabaseInfo extends DibiObject
 
 	/** @var array */
 	private $tables;
+	
+	/** @var DibiModifierContainer */
+	private $modifiers;
 
 
 
-	public function __construct(IDibiReflector $reflector, $name)
+	public function __construct(IDibiReflector $reflector, $name, DibiModifierContainer $modifiers)
 	{
 		$this->reflector = $reflector;
 		$this->name = $name;
+		$this->modifiers = $modifiers;
 	}
 
 
@@ -117,7 +121,7 @@ class DibiDatabaseInfo extends DibiObject
 		if ($this->tables === NULL) {
 			$this->tables = array();
 			foreach ($this->reflector->getTables() as $info) {
-				$this->tables[strtolower($info['name'])] = new DibiTableInfo($this->reflector, $info);
+				$this->tables[strtolower($info['name'])] = new DibiTableInfo($this->reflector, $info, $this->modifiers);
 			}
 		}
 	}
@@ -162,14 +166,18 @@ class DibiTableInfo extends DibiObject
 
 	/** @var DibiIndexInfo */
 	private $primaryKey;
+	
+	/** @var DibiModifierContainer */
+	private $modifiers;
 
 
 
-	public function __construct(IDibiReflector $reflector, array $info)
+	public function __construct(IDibiReflector $reflector, array $info, DibiModifierContainer $modifiers)
 	{
 		$this->reflector = $reflector;
 		$this->name = $info['name'];
 		$this->view = !empty($info['view']);
+		$this->modifiers = $modifiers;
 	}
 
 
@@ -291,7 +299,7 @@ class DibiTableInfo extends DibiObject
 		if ($this->columns === NULL) {
 			$this->columns = array();
 			foreach ($this->reflector->getColumns($this->name) as $info) {
-				$this->columns[strtolower($info['name'])] = new DibiColumnInfo($this->reflector, $info);
+				$this->columns[strtolower($info['name'])] = new DibiColumnInfo($this->reflector, $info, $this->modifiers);
 			}
 		}
 	}
@@ -351,12 +359,16 @@ class DibiResultInfo extends DibiObject
 
 	/** @var array */
 	private $names;
+	
+	/** @var DibiModifierContainer */
+	private $modifiers;
 
 
 
-	public function __construct(IDibiResultDriver $driver)
+	public function __construct(IDibiResultDriver $driver, DibiModifierContainer $modifiers)
 	{
 		$this->driver = $driver;
+		$this->modifiers = $modifiers;
 	}
 
 
@@ -427,7 +439,7 @@ class DibiResultInfo extends DibiObject
 			$this->columns = array();
 			$reflector = $this->driver instanceof IDibiReflector ? $this->driver : NULL;
 			foreach ($this->driver->getResultColumns() as $info) {
-				$this->columns[] = $this->names[$info['name']] = new DibiColumnInfo($reflector, $info);
+				$this->columns[] = $this->names[$info['name']] = new DibiColumnInfo($reflector, $info, $this->modifiers);
 			}
 		}
 	}
@@ -463,13 +475,17 @@ class DibiColumnInfo extends DibiObject
 
 	/** @var array (name, nativetype, [table], [fullname], [size], [nullable], [default], [autoincrement], [vendor]) */
 	private $info;
+	
+	/** @var DibiModifierContainer $modifiers */
+	private $modifiers;
 
 
 
-	public function __construct(IDibiReflector $reflector = NULL, array $info)
+	public function __construct(IDibiReflector $reflector = NULL, array $info, DibiModifierContainer $modifiers)
 	{
 		$this->reflector = $reflector;
 		$this->info = $info;
+		$this->modifiers = $modifiers;
 	}
 
 
@@ -512,7 +528,7 @@ class DibiColumnInfo extends DibiObject
 		if (empty($this->info['table']) || !$this->reflector) {
 			throw new DibiException("Table is unknown or not available.");
 		}
-		return new DibiTableInfo($this->reflector, array('name' => $this->info['table']));
+		return new DibiTableInfo($this->reflector, array('name' => $this->info['table']), $this->modifiers);
 	}
 
 
@@ -533,7 +549,7 @@ class DibiColumnInfo extends DibiObject
 	public function getType()
 	{
 		if (self::$types === NULL) {
-			self::$types = new DibiHashMap(array(__CLASS__, 'detectType'));
+			self::$types = new DibiHashMap(array($this, 'detectType'));
 		}
 		return self::$types->{$this->info['nativetype']};
 	}
@@ -617,8 +633,14 @@ class DibiColumnInfo extends DibiObject
 	 * @return string
 	 * @internal
 	 */
-	public static function detectType($type)
+	public function detectType($type)
 	{
+		foreach ($this->modifiers AS $modifier) {
+			if ($modifier->matchNativeType($type)) {
+				return $modifier;
+			}
+		}
+
 		static $patterns = array(
 			'BYTEA|BLOB|BIN' => dibi::BINARY,
 			'TEXT|CHAR|BIGINT|LONGLONG' => dibi::TEXT,

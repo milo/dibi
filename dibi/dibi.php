@@ -41,6 +41,7 @@ require_once dirname(__FILE__) . '/libs/DibiObject.php';
 require_once dirname(__FILE__) . '/libs/DibiHashMap.php';
 require_once dirname(__FILE__) . '/libs/DibiException.php';
 require_once dirname(__FILE__) . '/libs/DibiConnection.php';
+require_once dirname(__FILE__) . '/libs/DibiModifier.php';
 require_once dirname(__FILE__) . '/libs/DibiResult.php';
 require_once dirname(__FILE__) . '/libs/DibiResultIterator.php';
 require_once dirname(__FILE__) . '/libs/DibiRow.php';
@@ -456,6 +457,60 @@ class dibi
 	public static function getDatabaseInfo()
 	{
 		return self::getConnection()->getDatabaseInfo();
+	}
+	
+	
+	
+	/**
+	 * Register a user-defined modifier - monostate for DibiConnection::registerModifier().
+	 *
+	 * @param  string name
+	 * @param  DibiModifier
+	 * @return DibiConnection
+	 * @throws InvalidArgumentException
+	 */
+	public static function registerModifier($name, DibiModifier $modifier)
+	{
+	    return self::getConnection()->registerModifier($name, $modifier);
+	}
+
+
+
+	/**
+	 * Unregister a user-defined modifier - monostate for DibiConnection::unregisterModifier().
+	 *
+	 * @param string name
+	 * @return DibiConnection
+	 */
+	public static function unregisterModifier($name)
+	{
+	    return self::getConnection()->unregisterModifier($name);
+	}
+
+
+
+	/**
+	 * Safe way to get user-registerd modifiers - monostate for DibiConnection::getModifiers().
+	 *
+	 * @return DibiModifierContainer
+	 */
+	public static function getModifiers()
+	{
+		return self::getConnection()->getModifiers();
+	}
+
+
+
+	/**
+	 * Safe way to get user-registerd modifier by name - monostate for DibiConnection::getModifiers().
+	 *
+	 * @param  string name
+	 * @return DibiModifier
+	 * @throws InvalidArgumentException
+	 */
+	public static function getModifier($name)
+	{
+		return self::getConnection()->getModifier($name);
 	}
 
 

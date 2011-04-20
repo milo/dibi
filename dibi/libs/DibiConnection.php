@@ -45,6 +45,9 @@ class DibiConnection extends DibiObject
 
 	/** @var DibiHashMap Substitutes for identifiers */
 	private $substitutes;
+	
+	/** @var DibiModifierContainer */
+	private $modifiers;
 
 
 
@@ -103,6 +106,7 @@ class DibiConnection extends DibiObject
 		$config['name'] = $name;
 		$this->config = $config;
 		$this->driver = new $class;
+		$this->modifiers = new DibiModifierContainer;
 		$this->translator = new DibiTranslator($this);
 
 		// profiler
@@ -476,7 +480,7 @@ class DibiConnection extends DibiObject
 	 */
 	public function createResultSet(IDibiResultDriver $resultDriver)
 	{
-		return new DibiResult($resultDriver, $this->config['result']);
+		return new DibiResult($resultDriver, $this->config['result'], $this->modifiers);
 	}
 
 
@@ -716,7 +720,75 @@ class DibiConnection extends DibiObject
 	public function getDatabaseInfo()
 	{
 		$this->connected || $this->connect();
-		return new DibiDatabaseInfo($this->driver->getReflector(), isset($this->config['database']) ? $this->config['database'] : NULL);
+		return new DibiDatabaseInfo($this->driver->getReflector(), isset($this->config['database']) ? $this->config['database'] : NULL, $this->modifiers);
+	}
+
+
+
+	/**
+	 * Register user-defined modifier with connection.
+	 *
+	 * @param  string name
+	 * @param  DibiModifier
+	 * @return self
+	 * @throws InvalidArgumentException
+	 */
+	public function registerModifier($name, DibiModifier $modifier) // TODO: Overwrite already registered by bool or flag?
+	{
+		if (isset($this->modifiers[$name]))
+		{
+			throw new InvalidArgumentException("User modifier '$name' is already registered by " . get_class($this->modifiers[$name]) . " class.");
+		}
+
+		$modifier->init($name, $this);
+		$this->modifiers[$name] = $modifier;
+
+		return $this;
+	}
+	
+	
+	
+	/**
+	 * Unregister user-defined modifier.
+	 *
+	 * @return self
+	 */
+	public function unregisterModifier($name)
+	{
+		unset($this->modifiers[$name]);
+
+		return $this;
+	}
+
+
+
+	/**
+	 * Safe way to get user-registerd modifiers.
+	 *
+	 * @return DibiModifierContainer
+	 */
+	public function getModifiers()
+	{
+		return $this->modifiers;
+	}
+
+
+
+	/**
+	 * Safe way to get user-registerd modifier by name.
+	 *
+	 * @param  string name
+	 * @return DibiModifier
+	 * @throws InvalidArgumentException
+	 */
+	public function getModifier($name)
+	{
+		if (!isset($this->modifiers[$name]))
+		{
+			throw new InvalidArgumentException("User modifier '$name' is not registerd.");
+		}
+
+		return $this->modifiers[$name];
 	}
 
 

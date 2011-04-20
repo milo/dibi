@@ -57,6 +57,9 @@ class DibiResult extends DibiObject implements IDataSource
 
 	/** @var string  date-time format */
 	private $dateFormat = '';
+	
+	/** @var DibiModifierContainer **/
+	private $modifiers;
 
 
 
@@ -64,7 +67,7 @@ class DibiResult extends DibiObject implements IDataSource
 	 * @param  IDibiResultDriver
 	 * @param  array
 	 */
-	public function __construct($driver, $config)
+	public function __construct($driver, $config, DibiModifierContainer $modifiers)
 	{
 		$this->driver = $driver;
 
@@ -75,6 +78,8 @@ class DibiResult extends DibiObject implements IDataSource
 		if (!empty($config['formatDateTime'])) {
 			$this->dateFormat = is_string($config['formatDateTime']) ? $config['formatDateTime'] : '';
 		}
+		
+		$this->modifiers = $modifiers;
 	}
 
 
@@ -563,6 +568,10 @@ class DibiResult extends DibiObject implements IDataSource
 		if ($value === NULL || $value === FALSE) {
 			return NULL;
 		}
+		
+		if ($type instanceof DibiModifier) {
+		    return $type->toPhp($value);
+		}
 
 		switch ($type) {
 		case dibi::TEXT:
@@ -613,7 +622,7 @@ class DibiResult extends DibiObject implements IDataSource
 	public function getInfo()
 	{
 		if ($this->meta === NULL) {
-			$this->meta = new DibiResultInfo($this->getDriver());
+			$this->meta = new DibiResultInfo($this->getDriver(), $this->modifiers);
 		}
 		return $this->meta;
 	}

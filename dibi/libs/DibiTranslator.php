@@ -52,12 +52,16 @@ final class DibiTranslator extends DibiObject
 
 	/** @var DibiHashMap */
 	private $identifiers;
+	
+	/** @var DibiModifierContainer */
+	private $modifiers;
 
 
 
 	public function __construct(DibiConnection $connection)
 	{
 		$this->connection = $connection;
+		$this->modifiers = $connection->getModifiers();
 	}
 
 
@@ -120,10 +124,11 @@ final class DibiTranslator extends DibiObject
 						(\'|")|                      ## 7) lone quote
 						:(\S*?:)([a-zA-Z0-9._]?)|    ## 8,9) :substitution:
 						%([a-zA-Z~][a-zA-Z0-9~]{0,5})|## 10) modifier
-						(\?)                         ## 11) placeholder
+						%{([^}]+)}                   ## 11) user-registered modifier
+						(\?)                         ## 12) placeholder
 					)/xs',
 */                  // note: this can change $this->args & $this->cursor & ...
-					. preg_replace_callback('/(?=[`[\'":%?])(?:`(.+?)`|\[(.+?)\]|(\')((?:\'\'|[^\'])*)\'|(")((?:""|[^"])*)"|(\'|")|:(\S*?:)([a-zA-Z0-9._]?)|%([a-zA-Z~][a-zA-Z0-9~]{0,5})|(\?))/s',
+					. preg_replace_callback('/(?=[`[\'":%?])(?:`(.+?)`|\[(.+?)\]|(\')((?:\'\'|[^\'])*)\'|(")((?:""|[^"])*)"|(\'|")|:(\S*?:)([a-zA-Z0-9._]?)|%([a-zA-Z~][a-zA-Z0-9~]{0,5})|%{([^}]+)}|(\?))/s',
 							array($this, 'cb'),
 							substr($arg, $toSkip)
 					);
@@ -195,6 +200,32 @@ final class DibiTranslator extends DibiObject
 		// array processing (with or without modifier)
 		if ($value instanceof Traversable) {
 			$value = iterator_to_array($value);
+		}
+		
+		if (preg_match('/^{([^}]+)}$/', $modifier, $match))
+		{
+			$mod = $match[1];
+			if (!isset($this->modifiers[$mod]))
+			{
+				$this->hasError = TRUE;
+				return "**User modifier %$modifier is not registered**";
+			}
+			
+			$nr = $this->modifiers[$mod]->getNumArgs();
+			if ($nr <= 1)
+			{
+				return $this->modifiers[$mod]->toSql($value);
+			}
+
+			$value = is_array($value) ? $value : array($value);
+			$ng = count($value);
+			if ($nr != $ng)
+			{
+				$this->hasError = TRUE;
+				return "**User registered modifier require $nr argumets but $ng given.";
+			}
+
+			return call_user_func_array(array($this->modifiers[$mod], 'toSql'), $value);
 		}
 
 		if (is_array($value)) {
@@ -467,10 +498,11 @@ final class DibiTranslator extends DibiObject
 		//    [8] => substitution
 		//    [9] => substitution flag
 		//    [10] => modifier (when called from self::translate())
-		//    [11] => placeholder (when called from self::translate())
+		//    [11] => user-registered modifier (when called from self::translate())
+		//    [12] => placeholder (when called from self::translate())
 
 
-		if (!empty($matches[11])) { // placeholder
+		if (!empty($matches[12])) { // placeholder
 			$cursor = & $this->cursor;
 
 			if ($cursor >= count($this->args)) {
@@ -480,6 +512,32 @@ final class DibiTranslator extends DibiObject
 
 			$cursor++;
 			return $this->formatValue($this->args[$cursor - 1], FALSE);
+		}
+		
+		if (!empty($matches[11])) { // user-registered modifier
+			$mod = $matches[11];
+			$cursor = & $this->cursor;
+
+			if (!isset($this->modifiers[$mod]))
+			{
+				$this->hasError = TRUE;
+				return "**User modifier %{{$mod}} is not registered**";
+			}
+
+			$numArgs = $this->modifiers[$mod]->getNumArgs();
+			if ($cursor + $numArgs > count($this->args)) {
+				$this->hasError = TRUE;
+				return "**User modifier %{{$mod}} require $numArgs arguments**";
+			}
+			
+			$args = array();
+			for($numArgs; $numArgs > 0; $numArgs--)
+			{
+			    $args[] = $this->args[$cursor];
+			    $cursor++;
+			}
+			
+			return call_user_func_array(array($this->modifiers[$mod], 'toSql'), $args);
 		}
 
 		if (!empty($matches[10])) { // modifier
