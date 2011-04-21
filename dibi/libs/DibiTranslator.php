@@ -531,13 +531,47 @@ final class DibiTranslator extends DibiObject
 			}
 			
 			$args = array();
-			for($numArgs; $numArgs > 0; $numArgs--)
+			for($i = $numArgs; $i > 0; $i--)
 			{
 			    $args[] = $this->args[$cursor];
 			    $cursor++;
 			}
 			
-			return call_user_func_array(array($this->modifiers[$mod], 'toSql'), $args);
+			/*
+				TODO
+				Tohle neni pekne, ale modifikator muze pouzit opet self::translate()
+				Je potreba self::cb() nejak odizolovat, aby nepouzival promenne
+				objektu. Pri rekurzivnim zavolani se premazou. Mozna jako callback
+				predavat specialni objekt, ktery musi resit:
+				    Chybu pri prekladu
+				    Podminky
+				    Zjistit pocet zpracovanych argumentu (resp. kolik jich zbyva)
+			*/
+
+			$bckpVars = array('cursor', 'args', 'hasError');
+			$bckp = array();
+			foreach ($bckpVars AS $name)
+			{
+			    $bckp[$name] = $this->{$name};
+			}
+			
+			if ($numArgs < 1)
+			{
+			    $return = $this->modifiers[$mod]->toSql(NULL);
+			}
+			else
+			{
+				$return = call_user_func_array(array($this->modifiers[$mod], 'toSql'), $args);
+			}
+			
+			$hasError = $this->hasError;
+			foreach ($bckp AS $name => $value)
+			{
+			    $this->{$name} = $value;
+			}
+			
+			$this->hasError |= $hasError;
+			return $return;
 		}
 
 		if (!empty($matches[10])) { // modifier
