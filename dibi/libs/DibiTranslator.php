@@ -590,7 +590,24 @@ final class DibiTranslator extends DibiObject
 	public function delimite($value)
 	{
 		$value = $this->connection->substitute($value);
-		$parts = explode('.', $value);
+
+		if (strlen($value) === strcspn($value, "() \t\r\n")) {
+			return $this->delimiteCb(array($value));
+		}
+
+		return preg_replace_callback('~[^()\s]+\.[^()\s]+~', array($this, 'delimiteCb'), $value);
+	}
+
+
+
+	/**
+	 * PREG callback from delimite()
+	 * @param  array
+	 * @return string
+	 */
+	public function delimiteCb($matches)
+	{
+		$parts = explode('.', $matches[0]);
 		foreach ($parts as & $v) {
 			if ($v !== '*') $v = $this->driver->escape($v, dibi::IDENTIFIER);
 		}
